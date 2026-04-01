@@ -127,8 +127,8 @@
   <div id="dashboard" class="hidden">
     <div class="metrics" id="metrics"></div>
     <div class="toolbar">
-      <select id="fAgente" onchange="aplicarFiltros()"><option value="">Todos los comerciales</option></select>
-      <select id="fLider" onchange="aplicarFiltros()"><option value="">Todos los líderes</option></select>
+      <select id="fAgente" onchange="actualizarLideres()"><option value="">Todos los comerciales</option></select>
+      <select id="fLider" onchange="actualizarVendedores()"><option value="">Todos los líderes</option></select>
       <input type="text" id="fBuscar" placeholder="Buscar vendedor..." oninput="aplicarFiltros()" />
       <select id="fOp" onchange="aplicarFiltros()">
         <option value="">Todas las oportunidades</option>
@@ -247,9 +247,29 @@ function procesarData(data) {
 
 function poblarFiltros() {
   const agentes = [...new Set(allRows.map(r=>r.agente).filter(Boolean))].sort();
-  const lideres = [...new Set(allRows.map(r=>r.lider).filter(Boolean))].sort();
   $('fAgente').innerHTML = '<option value="">Todos los comerciales</option>' + agentes.map(a=>`<option>${escH(a)}</option>`).join('');
-  $('fLider').innerHTML  = '<option value="">Todos los líderes</option>'    + lideres.map(l=>`<option>${escH(l)}</option>`).join('');
+  actualizarLideres();
+}
+
+function actualizarLideres() {
+  const agente = $('fAgente').value;
+  const liderActual = $('fLider').value;
+  const base = agente ? allRows.filter(r=>r.agente===agente) : allRows;
+  const lideres = [...new Set(base.map(r=>r.lider).filter(Boolean))].sort();
+  $('fLider').innerHTML = '<option value="">Todos los líderes</option>' + lideres.map(l=>`<option>${escH(l)}</option>`).join('');
+  if (lideres.includes(liderActual)) $('fLider').value = liderActual;
+  actualizarVendedores();
+}
+
+function actualizarVendedores() {
+  const agente = $('fAgente').value;
+  const lider  = $('fLider').value;
+  const buscarActual = $('fBuscar').value;
+  let base = allRows;
+  if (agente) base = base.filter(r=>r.agente===agente);
+  if (lider)  base = base.filter(r=>r.lider===lider);
+  // El buscador de vendedor es texto libre, no select — solo aplicar filtros
+  aplicarFiltros();
 }
 
 function aplicarFiltros() {
@@ -275,7 +295,7 @@ function aplicarFiltros() {
 function limpiarFiltros() {
   ['fAgente','fLider','fOp','fRango'].forEach(id => $(id).value = '');
   $('fBuscar').value = '';
-  aplicarFiltros();
+  actualizarLideres();
 }
 
 function sortBy(col) {
