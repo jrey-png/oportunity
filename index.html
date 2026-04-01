@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reporte de Oportunidades</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #F5F4F0; --surface: #FFFFFF; --surface2: #EEECE7; --border: #DDDBD4;
+    --text: #1A1916; --muted: #7A786F;
+    --green: #2D6A4F; --green-bg: #D8F0E6;
+    --blue: #1B4F8A; --blue-bg: #D6E8FA;
+    --amber: #7A4A00; --amber-bg: #FDE9B8;
+    --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); font-family: var(--sans); color: var(--text); min-height: 100vh; }
+  header { background: var(--text); color: var(--bg); padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-family: var(--mono); font-size: 15px; font-weight: 500; letter-spacing: 0.04em; }
+  header span { font-family: var(--mono); font-size: 12px; color: #888; }
+  .main { padding: 28px 32px; max-width: 1400px; margin: 0 auto; }
+  .info-box { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--text); border-radius: 4px; padding: 14px 18px; margin-bottom: 20px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .info-box strong { color: var(--text); font-weight: 500; }
+  .config-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 20px; overflow: hidden; }
+  .config-toggle { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; cursor: pointer; user-select: none; }
+  .config-toggle span { font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+  .config-toggle .arrow { font-family: var(--mono); font-size: 12px; color: var(--muted); transition: transform 0.2s; }
+  .config-toggle.open .arrow { transform: rotate(180deg); }
+  .config-body { display: none; border-top: 1px solid var(--border); padding: 20px; }
+  .config-body.visible { display: block; }
+  .config-section-title { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; font-family: var(--mono); }
+  .fields-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; font-family: var(--mono); }
+  .field input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 3px; font-family: var(--mono); font-size: 12px; background: var(--bg); color: var(--text); outline: none; }
+  .field input:focus { border-color: var(--text); }
+  .field .hint { font-size: 10px; color: var(--muted); margin-top: 3px; font-family: var(--mono); }
+  .drop-zone { border: 1.5px dashed var(--border); border-radius: 4px; padding: 48px 20px; text-align: center; cursor: pointer; background: var(--surface); transition: background 0.15s, border-color 0.15s; margin-bottom: 20px; }
+  .drop-zone:hover, .drop-zone.over { background: var(--surface2); border-color: var(--text); }
+  .drop-zone .icon { font-family: var(--mono); font-size: 24px; margin-bottom: 12px; color: var(--muted); }
+  .drop-zone .label { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+  .drop-zone .sub { font-size: 13px; color: var(--muted); font-family: var(--mono); }
+  #status { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-bottom: 16px; min-height: 18px; }
+  #status.ok { color: var(--green); } #status.err { color: #c0392b; }
+  .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .metric { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 16px 18px; }
+  .metric .lbl { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 8px; }
+  .metric .val { font-family: var(--mono); font-size: 26px; font-weight: 500; }
+  .metric .sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+  .toolbar select, .toolbar input[type=text] { padding: 7px 10px; border: 1px solid var(--border); border-radius: 3px; font-family: var(--mono); font-size: 12px; background: var(--surface); color: var(--text); outline: none; }
+  .toolbar select:focus, .toolbar input[type=text]:focus { border-color: var(--text); }
+  .toolbar input[type=text] { min-width: 180px; }
+  .toolbar button { padding: 7px 14px; border: 1px solid var(--border); border-radius: 3px; font-family: var(--mono); font-size: 12px; background: var(--surface); color: var(--text); cursor: pointer; }
+  .toolbar button:hover { background: var(--surface2); }
+  .toolbar .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); margin-left: auto; }
+  .toolbar .btn-primary:hover { background: #3a3835; }
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead tr { background: var(--surface2); }
+  th { text-align: left; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+  th:hover { color: var(--text); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  .td-num { font-family: var(--mono); font-size: 13px; font-weight: 500; text-align: right; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 2px; font-family: var(--mono); font-size: 11px; font-weight: 500; }
+  .b0 { background: var(--surface2); color: var(--muted); }
+  .b1 { background: var(--green-bg); color: var(--green); }
+  .b2 { background: var(--blue-bg); color: var(--blue); }
+  .b3 { background: var(--amber-bg); color: var(--amber); }
+  .footer-info { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 10px 14px; border-top: 1px solid var(--border); background: var(--surface2); }
+  .hidden { display: none; }
+  @media (max-width: 700px) { .main { padding: 16px; } .metrics { grid-template-columns: 1fr 1fr; } header { padding: 14px 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>REPORTE DE OPORTUNIDADES</h1>
+  <span id="header-date"></span>
+</header>
+<div class="main">
+
+  <div class="info-box">
+    Subí el Excel exportado desde Odoo. Se aplican automáticamente los filtros:
+    <strong>visible en carrito = VERDADERO</strong> y <strong>sin comisión = FALSO</strong>.
+    La jerarquía es <strong>Comercial → Líder → Vendedor</strong> (Cliente).
+  </div>
+
+  <div class="config-panel">
+    <div class="config-toggle open" id="configToggle">
+      <span>Artículos de oportunidad — configurar una vez</span>
+      <span class="arrow">&#9660;</span>
+    </div>
+    <div class="config-body visible" id="configBody">
+      <div class="config-section-title">Nombre exacto del producto tal como aparece en el Excel (columna "Producto/Nombre")</div>
+      <div class="fields-grid">
+        <div class="field">
+          <label>Artículo rango 1 — umbral 7 unidades</label>
+          <input id="art1" placeholder="Ej: 4796 SHORT DINA" />
+          <div class="hint">Vendedor necesita acumular 7+ unidades en el mes</div>
+        </div>
+        <div class="field">
+          <label>Artículo rango 2 — umbral 10 unidades</label>
+          <input id="art2" placeholder="Ej: 5479 TOP RISE" />
+          <div class="hint">Vendedor necesita acumular 10+ unidades en el mes</div>
+        </div>
+        <div class="field">
+          <label>Artículo rango 3 — umbral 15 unidades</label>
+          <input id="art3" placeholder="Ej: 6583 MUSCULOSA ELIF" />
+          <div class="hint">Vendedor necesita acumular 15+ unidades en el mes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <div class="icon">[ XLSX ]</div>
+    <div class="label">Arrastrá el archivo Excel de Odoo aquí</div>
+    <div class="sub">o hacé click para seleccionar &mdash; acepta .xlsx</div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" />
+  </div>
+
+  <div id="status"></div>
+
+  <div id="dashboard" class="hidden">
+    <div class="metrics" id="metrics"></div>
+    <div class="toolbar">
+      <select id="fAgente" onchange="aplicarFiltros()"><option value="">Todos los comerciales</option></select>
+      <select id="fLider" onchange="aplicarFiltros()"><option value="">Todos los líderes</option></select>
+      <input type="text" id="fBuscar" placeholder="Buscar vendedor..." oninput="aplicarFiltros()" />
+      <select id="fOp" onchange="aplicarFiltros()">
+        <option value="">Todas las oportunidades</option>
+        <option value="1">1+ oportunidad</option>
+        <option value="2">2+ oportunidades</option>
+        <option value="3">3 oportunidades</option>
+        <option value="none">Sin oportunidades</option>
+      </select>
+      <select id="fRango" onchange="aplicarFiltros()">
+        <option value="">Cualquier rango</option>
+        <option value="1">Rango máximo: 1 (7u)</option>
+        <option value="2">Rango máximo: 2 (10u)</option>
+        <option value="3">Rango máximo: 3 (15u)</option>
+      </select>
+      <button onclick="limpiarFiltros()">Limpiar</button>
+      <button class="btn-primary" onclick="exportExcel()">Exportar Excel</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th onclick="sortBy('clienteId')">ID <span id="s_clienteId">&#8645;</span></th>
+          <th onclick="sortBy('vendedor')">Vendedor <span id="s_vendedor">&#8645;</span></th>
+          <th onclick="sortBy('lider')">Líder <span id="s_lider">&#8645;</span></th>
+          <th onclick="sortBy('agente')">Comercial <span id="s_agente">&#8645;</span></th>
+          <th onclick="sortBy('totalUnidades')" style="text-align:right">Unidades <span id="s_totalUnidades">&#8645;</span></th>
+          <th onclick="sortBy('opsCargadas')" style="text-align:center">Oportunidades <span id="s_opsCargadas">&#8645;</span></th>
+          <th onclick="sortBy('maxRango')">Mayor rango <span id="s_maxRango">&#8645;</span></th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="footer-info" id="footerInfo"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('header-date').textContent = new Date().toLocaleDateString('es-AR', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+const configToggle = document.getElementById('configToggle');
+const configBody = document.getElementById('configBody');
+configToggle.addEventListener('click', () => {
+  configBody.classList.toggle('visible');
+  configToggle.classList.toggle('open');
+});
+
+let allRows = [], filteredRows = [], sortCol = 'vendedor', sortDir = 1;
+const $ = id => document.getElementById(id);
+
+const COLS = {
+  agente:   'Líneas del pedido/Comercial',
+  lider:    'Líneas del pedido/Cliente/Lider asociado',
+  vendedor: 'Líneas del pedido/Cliente',
+  clienteId: 'Líneas del pedido/Cliente/ID',
+  producto: 'Líneas del pedido/Producto/Nombre',
+  refInterna: 'Líneas del pedido/Producto/Referencia interna',
+  cantidad: 'Líneas del pedido/Cantidad',
+  visible:  'Líneas del pedido/Es visible en el carrito?',
+  sinComis: 'Líneas del pedido/Producto/Sin comisión'
+};
+const UMBRALES = { 1:7, 2:10, 3:15 };
+
+function getArts() {
+  return { 1:$('art1').value.trim(), 2:$('art2').value.trim(), 3:$('art3').value.trim() };
+}
+
+function procesarData(data) {
+  const arts = getArts();
+  const artNames = [arts[1].trim(), arts[2].trim(), arts[3].trim()];
+  const map = {};
+
+  data.forEach(row => {
+    const vendedor  = (row[COLS.vendedor]  || '').toString().trim();
+    const clienteId = (row[COLS.clienteId] || '').toString().trim();
+    const lider     = (row[COLS.lider]     || '').toString().trim();
+    const agente    = (row[COLS.agente]    || '').toString().trim();
+    const producto = (row[COLS.producto] || '').toString().trim();
+    const cantidad = parseFloat((row[COLS.cantidad] || '0').toString().replace(',','.')) || 0;
+    if (!vendedor) return;
+
+    const vis = row[COLS.visible];
+    const sc  = row[COLS.sinComis];
+    const visOk = (vis === true || vis === 1 || vis === '1' || vis === 'TRUE' || vis === 'Verdadero');
+    const scOk  = (sc  === false || sc  === 0 || sc  === '0' || sc  === 'FALSE' || sc  === 'Falso' || sc === '');
+
+    // Ver si es un artículo de oportunidad
+    let rangoOp = 0;
+    if (arts[1] && producto === arts[1].trim()) rangoOp = 1;
+    else if (arts[2] && producto === arts[2].trim()) rangoOp = 2;
+    else if (arts[3] && producto === arts[3].trim()) rangoOp = 3;
+
+    // Si no es oportunidad y no pasa los filtros normales, ignorar
+    if (rangoOp === 0 && (!visOk || !scOk)) return;
+
+    const key = vendedor + '§' + agente + '§' + lider;
+    if (!map[key]) map[key] = { vendedor, clienteId, lider, agente, totalUnidades:0, opCargada:{1:false,2:false,3:false} };
+
+    if (rangoOp > 0) {
+      // Es oportunidad: marcar como cargada (presencia = la cargó)
+      map[key].opCargada[rangoOp] = true;
+    } else {
+      // Es producto normal: sumar unidades solo si tiene referencia interna
+      const refInterna = (row[COLS.refInterna] || '').toString().trim();
+      if (refInterna !== '') map[key].totalUnidades += cantidad;
+    }
+  });
+
+  const arts2 = getArts();
+  allRows = Object.values(map).map(v => {
+    let opsCargadas = 0, maxRango = 0;
+    [1,2,3].forEach(r => { if (v.opCargada[r]) { opsCargadas++; if (r > maxRango) maxRango = r; } });
+    const nombreMaxRango = maxRango > 0 ? arts2[maxRango].trim() : '';
+    return { vendedor:v.vendedor, clienteId:v.clienteId, lider:v.lider, agente:v.agente, totalUnidades:v.totalUnidades, opsCargadas, maxRango, nombreMaxRango };
+  });
+  return 0;
+}
+
+function poblarFiltros() {
+  const agentes = [...new Set(allRows.map(r=>r.agente).filter(Boolean))].sort();
+  const lideres = [...new Set(allRows.map(r=>r.lider).filter(Boolean))].sort();
+  $('fAgente').innerHTML = '<option value="">Todos los comerciales</option>' + agentes.map(a=>`<option>${escH(a)}</option>`).join('');
+  $('fLider').innerHTML  = '<option value="">Todos los líderes</option>'    + lideres.map(l=>`<option>${escH(l)}</option>`).join('');
+}
+
+function aplicarFiltros() {
+  const agente = $('fAgente').value;
+  const lider  = $('fLider').value;
+  const op     = $('fOp').value;
+  const rango  = parseInt($('fRango').value) || 0;
+  const buscar = ($('fBuscar').value || '').toLowerCase();
+
+  filteredRows = allRows.filter(r => {
+    if (agente && r.agente !== agente) return false;
+    if (lider  && r.lider  !== lider)  return false;
+    if (op === 'none' && r.opsCargadas !== 0) return false;
+    if (op && op !== 'none' && r.opsCargadas < parseInt(op)) return false;
+    if (rango && r.maxRango !== rango) return false;
+    if (buscar && !r.vendedor.toLowerCase().includes(buscar)) return false;
+    return true;
+  });
+  renderMetrics(filteredRows);
+  renderTabla();
+}
+
+function limpiarFiltros() {
+  ['fAgente','fLider','fOp','fRango'].forEach(id => $(id).value = '');
+  $('fBuscar').value = '';
+  aplicarFiltros();
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = 1; }
+  ['clienteId','vendedor','lider','agente','totalUnidades','opsCargadas','maxRango'].forEach(c => {
+    const el = $('s_'+c);
+    if (el) el.innerHTML = c===col ? (sortDir===1?'&#8593;':'&#8595;') : '&#8645;';
+  });
+  renderTabla();
+}
+
+function renderTabla() {
+  const rows = [...filteredRows].sort((a,b) => {
+    const av = a[sortCol], bv = b[sortCol];
+    if (typeof av === 'number') return (av-bv)*sortDir;
+    return String(av).localeCompare(String(bv),'es')*sortDir;
+  });
+  const LIMIT = 1000;
+  $('tbody').innerHTML = rows.slice(0,LIMIT).map(r=>`<tr>
+    <td class="td-mono" style="color:var(--muted)">${escH(r.clienteId)}</td>
+    <td>${escH(r.vendedor)}</td>
+    <td style="color:var(--muted)">${escH(r.lider)||'—'}</td>
+    <td style="color:var(--muted)">${escH(r.agente)||'—'}</td>
+    <td class="td-num">${Math.round(r.totalUnidades).toLocaleString('es')}</td>
+    <td style="text-align:center">${badgeOp(r.opsCargadas)}</td>
+    <td>${badgeRango(r.maxRango, r.nombreMaxRango)}</td>
+  </tr>`).join('');
+  $('footerInfo').textContent = rows.length > LIMIT
+    ? `Mostrando ${LIMIT.toLocaleString('es')} de ${rows.length.toLocaleString('es')} vendedores. Usá los filtros para reducir.`
+    : `${rows.length.toLocaleString('es')} vendedor${rows.length!==1?'es':''}`;
+}
+
+function renderMetrics(rows) {
+  const total = rows.length;
+  const conOp = rows.filter(r=>r.opsCargadas>0).length;
+  const con3  = rows.filter(r=>r.maxRango===3).length;
+  const pct   = total ? Math.round(conOp/total*100) : 0;
+  $('metrics').innerHTML = `
+    <div class="metric"><div class="lbl">Vendedores</div><div class="val">${total.toLocaleString('es')}</div><div class="sub">en selección actual</div></div>
+    <div class="metric"><div class="lbl">Con oportunidad</div><div class="val">${conOp.toLocaleString('es')}</div><div class="sub">${pct}% del total</div></div>
+    <div class="metric"><div class="lbl">Rango máximo 3</div><div class="val">${con3.toLocaleString('es')}</div><div class="sub">15+ unidades alcanzadas</div></div>
+    <div class="metric"><div class="lbl">Sin oportunidad</div><div class="val">${(total-conOp).toLocaleString('es')}</div><div class="sub">${100-pct}% del total</div></div>`;
+}
+
+function badgeOp(n) {
+  if (n===0) return `<span class="badge b0">ninguna</span>`;
+  if (n===1) return `<span class="badge b1">1</span>`;
+  if (n===2) return `<span class="badge b2">2</span>`;
+  return `<span class="badge b3">3</span>`;
+}
+function badgeRango(r, nombre) {
+  if (r===0) return `<span class="badge b0">—</span>`;
+  const cls = ['','b1','b2','b3'][r];
+  const label = nombre || ('Rango '+r);
+  return `<span class="badge ${cls}">${escH(label)}</span>`;
+}
+
+function exportExcel() {
+  const rows = filteredRows.length ? filteredRows : allRows;
+  const headers = ['ID','Vendedor','Líder','Comercial','Unidades totales','Oportunidades cargadas','Nro mayor rango','Artículo mayor rango'];
+  const data = [headers, ...rows.map(r => [
+    r.clienteId, r.vendedor, r.lider, r.agente,
+    Math.round(r.totalUnidades),
+    r.opsCargadas,
+    r.maxRango || '',
+    r.nombreMaxRango || ''
+  ])];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:12},{wch:35},{wch:35},{wch:25},{wch:16},{wch:20},{wch:14},{wch:35}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Oportunidades');
+  XLSX.writeFile(wb, 'oportunidades_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+
+function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function cargarArchivo(file) {
+  const st = $('status');
+  st.className = ''; st.textContent = 'Leyendo archivo...';
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if (!data.length) { st.className='err'; st.textContent='El archivo está vacío.'; return; }
+
+      const colsArchivo = Object.keys(data[0]);
+      const faltantes = Object.values(COLS).filter(c => !colsArchivo.includes(c));
+      if (faltantes.length) {
+        st.className = 'err';
+        st.textContent = 'Columnas no encontradas en el archivo: ' + faltantes.join(' | ');
+        return;
+      }
+
+      const omitidas = procesarData(data);
+      poblarFiltros();
+      aplicarFiltros();
+      $('dashboard').classList.remove('hidden');
+      configBody.classList.remove('visible');
+      configToggle.classList.remove('open');
+      st.className = 'ok';
+      st.textContent = `OK — ${data.length.toLocaleString('es')} filas totales → ${(data.length-omitidas).toLocaleString('es')} válidas (visible=SÍ, sin comisión=NO) → ${allRows.length.toLocaleString('es')} vendedores`;
+    } catch(err) {
+      st.className = 'err'; st.textContent = 'Error al leer: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+$('dropZone').addEventListener('click', ()=>$('fileInput').click());
+$('fileInput').addEventListener('change', e=>{ if(e.target.files[0]) cargarArchivo(e.target.files[0]); });
+$('dropZone').addEventListener('dragover', e=>{ e.preventDefault(); $('dropZone').classList.add('over'); });
+$('dropZone').addEventListener('dragleave', ()=>$('dropZone').classList.remove('over'));
+$('dropZone').addEventListener('drop', e=>{
+  e.preventDefault(); $('dropZone').classList.remove('over');
+  if(e.dataTransfer.files[0]) cargarArchivo(e.dataTransfer.files[0]);
+});
+</script>
+</body>
+</html>
