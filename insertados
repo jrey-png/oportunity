@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análisis de Inserciones — Logística</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg: #0f0f13; --surface: #17171e; --surface2: #1e1e28; --border: #2a2a38;
+    --accent: #e8c547; --accent3: #47c5e8; --danger: #e84747; --safe: #47e8a0;
+    --text: #e8e8f0; --muted: #6b6b80;
+    --mono: 'Space Mono', monospace; --sans: 'Sora', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 18px 36px; display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo-mark {
+    width: 34px; height: 34px; background: var(--accent);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 700; font-size: 13px;
+    color: var(--bg); flex-shrink: 0;
+  }
+  header h1 { font-size: 14px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+  header span { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .main { max-width: 1440px; margin: 0 auto; padding: 32px 36px; }
+
+  .upload-section { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .upload-card {
+    background: var(--surface); border: 1px dashed var(--border);
+    border-radius: 4px; padding: 24px; text-align: center;
+    cursor: pointer; transition: border-color .2s, background .2s; position: relative;
+  }
+  .upload-card:hover { border-color: var(--accent); background: var(--surface2); }
+  .upload-card.loaded { border-style: solid; border-color: var(--safe); }
+  .upload-card input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-card h3 { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 5px; }
+  .upload-card p { font-size: 11px; color: var(--muted); font-family: var(--mono); line-height: 1.6; }
+  .upload-card .upload-icon { font-size: 24px; margin-bottom: 8px; display: block; }
+  .loaded-name { font-size: 11px; color: var(--safe); font-family: var(--mono); margin-top: 7px; }
+
+  .config-bar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 18px 24px;
+    display: flex; gap: 24px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 24px;
+  }
+  .config-field { display: flex; flex-direction: column; gap: 5px; }
+  .config-field label { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); }
+  .config-field input {
+    background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 14px;
+    padding: 7px 10px; border-radius: 3px; width: 130px; transition: border-color .2s;
+  }
+  .config-field input:focus { outline: none; border-color: var(--accent); }
+  .config-field .unit { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .btn-run {
+    background: var(--accent); color: var(--bg); border: none;
+    padding: 9px 22px; font-family: var(--mono); font-size: 12px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+    border-radius: 3px; transition: opacity .2s, transform .1s; margin-left: auto;
+  }
+  .btn-run:hover { opacity: .85; transform: translateY(-1px); }
+  .btn-run:disabled { opacity: .3; cursor: not-allowed; transform: none; }
+
+  /* SEARCHABLE DROPDOWN */
+  .search-dropdown { position: relative; width: 260px; }
+  .search-dropdown input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 7px 28px 7px 10px; border-radius: 3px;
+    cursor: pointer; transition: border-color .2s;
+  }
+  .search-dropdown input:focus { outline: none; border-color: var(--accent); cursor: text; }
+  .search-dropdown .dd-arrow {
+    position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 10px; pointer-events: none;
+  }
+  .dd-list {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--surface2); border: 1px solid var(--accent);
+    border-radius: 3px; z-index: 300; max-height: 220px; overflow-y: auto;
+  }
+  .dd-list.open { display: block; }
+  .dd-item {
+    padding: 7px 12px; font-family: var(--mono); font-size: 12px;
+    cursor: pointer; transition: background .1s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dd-item:hover { background: var(--surface); color: var(--accent); }
+  .dd-item.active { color: var(--accent); font-weight: 700; }
+  .dd-item.muted { color: var(--muted); }
+  .dd-empty { padding: 8px 12px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  .filter-bar {
+    display: none; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 14px 20px;
+    gap: 20px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 20px;
+  }
+  .filter-bar.visible { display: flex; }
+  .filter-bar label { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); display: block; margin-bottom: 5px; }
+  .btn-clear {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); font-family: var(--mono); font-size: 11px;
+    padding: 7px 14px; border-radius: 3px; cursor: pointer; transition: all .2s;
+    letter-spacing: .05em; text-transform: uppercase; margin-left: auto;
+  }
+  .btn-clear:hover { border-color: var(--accent); color: var(--accent); }
+
+  .error-box {
+    background: #2a1515; border: 1px solid var(--danger);
+    border-radius: 4px; padding: 12px 18px;
+    font-family: var(--mono); font-size: 12px; color: var(--danger);
+    margin-bottom: 16px; display: none;
+  }
+
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 18px 20px; }
+  .metric-card .label { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); margin-bottom: 7px; }
+  .metric-card .value { font-size: 26px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+  .metric-card .sub { font-size: 10px; color: var(--muted); margin-top: 4px; font-family: var(--mono); }
+  .metric-card.highlight .value { color: var(--accent); }
+  .metric-card.danger .value { color: var(--danger); }
+
+  .section-title { font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-family: var(--mono); margin-bottom: 12px; }
+
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: auto; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { background: var(--surface2); border-bottom: 1px solid var(--border); }
+  th {
+    padding: 10px 14px; text-align: left;
+    font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted); white-space: nowrap;
+    cursor: pointer; user-select: none;
+  }
+  th:hover { color: var(--accent); }
+  th.sorted { color: var(--accent); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .12s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); cursor: pointer; }
+  tbody tr.sel { background: #1e2218; border-left: 3px solid var(--accent); }
+  td { padding: 10px 14px; font-family: var(--mono); font-size: 12px; vertical-align: middle; }
+  td.nc { font-family: var(--sans); font-weight: 600; font-size: 13px; }
+  td.num { text-align: right; }
+
+  .bar-wrap { display: flex; align-items: center; gap: 7px; justify-content: flex-end; }
+  .bar-bg { width: 60px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; background: var(--accent); }
+  .bar-fill.d { background: var(--danger); }
+  .bar-fill.s { background: var(--safe); }
+  .pb { font-family: var(--mono); font-size: 11px; min-width: 36px; text-align: right; }
+  .pb.h { color: var(--danger); } .pb.m { color: var(--accent); } .pb.l { color: var(--safe); }
+
+  .detail-panel { background: var(--surface); border: 1px solid var(--accent); border-radius: 4px; margin-bottom: 24px; overflow: hidden; display: none; }
+  .detail-panel.visible { display: block; }
+  .detail-panel-header { background: var(--surface2); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .detail-panel-header h3 { font-size: 13px; font-weight: 600; }
+  .agent-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .btn-close-detail { background: transparent; border: 1px solid var(--border); color: var(--muted); font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: 3px; cursor: pointer; }
+  .btn-close-detail:hover { color: var(--danger); border-color: var(--danger); }
+  .detail-panel-body { padding: 16px 20px; }
+
+  .salida-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .salida-chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 3px 9px; font-family: var(--mono); font-size: 11px; color: var(--accent3); }
+
+  table.dt { width: 100%; font-size: 12px; }
+  table.dt th { font-size: 10px; padding: 8px 12px; background: var(--bg); text-align: left; font-family: var(--mono); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  table.dt td { padding: 7px 12px; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  table.dt tr:last-child td { border-bottom: none; }
+  table.dt td.cr { color: var(--danger); font-weight: 700; }
+
+  .placeholder { text-align: center; padding: 70px 20px; color: var(--muted); }
+  .placeholder .big { font-size: 44px; margin-bottom: 14px; }
+  .placeholder p { font-family: var(--mono); font-size: 12px; max-width: 360px; margin: 0 auto; line-height: 1.7; }
+
+  footer { border-top: 1px solid var(--border); padding: 14px 36px; font-family: var(--mono); font-size: 11px; color: var(--muted); display: flex; gap: 16px; align-items: center; }
+  #status-bar { margin-left: auto; }
+
+  @media (max-width: 900px) {
+    .main { padding: 16px; } header { padding: 14px 16px; }
+    .upload-section { grid-template-columns: 1fr; }
+    .metrics-grid { grid-template-columns: 1fr 1fr; }
+    footer { padding: 12px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">LG</div>
+  <div>
+    <h1>Análisis de Inserciones — Logística</h1>
+    <span>Impacto en armado por ventana crítica de salida</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="upload-section">
+    <div class="upload-card" id="card-inserciones">
+      <input type="file" id="file-inserciones" accept=".xlsx,.xls,.csv">
+      <span class="upload-icon">📦</span>
+      <h3>Archivo de Inserciones</h3>
+      <p>Columnas: Fecha · Agente Comercial · Líder<br>Vendedor · Prendas · Artículo · Pedido</p>
+      <div class="loaded-name" id="name-inserciones"></div>
+    </div>
+    <div class="upload-card" id="card-salidas">
+      <input type="file" id="file-salidas" accept=".xlsx,.xls,.csv">
+      <span class="upload-icon">📅</span>
+      <h3>Fechas de Salida por Agente</h3>
+      <p>Columnas: Agente · Ruta · Fecha_Salida_1 · Fecha_Salida_2…<br>(una fila por agente)</p>
+      <div class="loaded-name" id="name-salidas"></div>
+    </div>
+  </div>
+
+  <div class="config-bar">
+    <div class="config-field">
+      <label>Ventana crítica</label>
+      <input type="number" id="cfg-ventana" value="5" min="0" max="30">
+      <div class="unit">días antes de cada salida</div>
+    </div>
+    <div class="config-field">
+      <label>Ritmo de armado</label>
+      <input type="number" id="cfg-ritmo" value="300" min="1">
+      <div class="unit">prendas por hora</div>
+    </div>
+    <button class="btn-run" id="btn-run" disabled>&#9654; Analizar</button>
+  </div>
+
+  <div class="error-box" id="error-box"></div>
+
+  <div id="results">
+    <div class="placeholder">
+      <div class="big">📊</div>
+      <p>Cargá los dos archivos y presioná <strong>Analizar</strong> para ver el informe.</p>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span>Herramienta de uso interno — Logística</span>
+  <span id="status-bar">Sin datos cargados</span>
+</footer>
+
+<script>
+// ── STATE ──
+let dataInserciones = null, dataSalidas = null;
+let allAgentData = [], allRutas = [], allAgentsList = [];
+let sortState = { col: 'criticalPct', dir: -1 };
+let activeAgente = null, activeRuta = null;
+let currentVentana = 5, currentRitmo = 300;
+
+// ── DATE PARSING ──
+function excelSerialToDate(s) {
+  const adj = s > 59 ? s - 1 : s;
+  const d = new Date(Date.UTC(1899, 11, 31) + adj * 86400000);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+function parseDate(v) {
+  if (!v && v !== 0) return null;
+  if (v instanceof Date) return isNaN(v) ? null : new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  if (typeof v === 'number') { if (v < 1 || v > 2958465) return null; return excelSerialToDate(v); }
+  const s = String(v).trim(); if (!s) return null;
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmy) return new Date(+dmy[3], +dmy[2]-1, +dmy[1]);
+  const ymd = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (ymd) return new Date(+ymd[1], +ymd[2]-1, +ymd[3]);
+  return null;
+}
+const fmtDate = d => d ? d.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+const fmtNum  = n => n.toLocaleString('es-AR');
+function fmtHrs(h) {
+  if (h===0) return '0h'; if (h<1) return `${Math.round(h*60)} min`;
+  const hh=Math.floor(h), mm=Math.round((h-hh)*60);
+  return mm>0 ? `${hh}h ${mm}m` : `${hh}h`;
+}
+const daysBetween = (a,b) => Math.round((b-a)/86400000);
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// ── FILE READING ──
+function readExcel(file) {
+  return new Promise((res,rej) => {
+    const r = new FileReader();
+    r.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, {type:'array',cellDates:false,raw:false});
+        res(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:'',raw:true}));
+      } catch(err){rej(err);}
+    };
+    r.onerror=rej; r.readAsArrayBuffer(file);
+  });
+}
+function findCol(row, candidates) {
+  const keys = Object.keys(row);
+  for (const c of candidates) { const f = keys.find(k=>k.trim().toLowerCase().includes(c.toLowerCase())); if(f) return f; }
+  return null;
+}
+
+// ── FILE HANDLERS ──
+document.getElementById('file-inserciones').addEventListener('change', async e => {
+  const file = e.target.files[0]; if(!file) return;
+  try {
+    dataInserciones = await readExcel(file);
+    document.getElementById('name-inserciones').textContent = `✓ ${file.name} (${fmtNum(dataInserciones.length)} filas)`;
+    document.getElementById('card-inserciones').classList.add('loaded');
+    checkReady();
+  } catch(err){showError('Error leyendo inserciones: '+err.message);}
+});
+document.getElementById('file-salidas').addEventListener('change', async e => {
+  const file = e.target.files[0]; if(!file) return;
+  try {
+    dataSalidas = await readExcel(file);
+    document.getElementById('name-salidas').textContent = `✓ ${file.name} (${fmtNum(dataSalidas.length)} agentes)`;
+    document.getElementById('card-salidas').classList.add('loaded');
+    checkReady();
+  } catch(err){showError('Error leyendo salidas: '+err.message);}
+});
+function checkReady() { document.getElementById('btn-run').disabled = !(dataInserciones && dataSalidas); }
+document.getElementById('btn-run').addEventListener('click', runAnalysis);
+
+// ── ANALYSIS ──
+function runAnalysis() {
+  hideError();
+  try {
+    const ventanaRaw = document.getElementById('cfg-ventana').value;
+    currentVentana   = ventanaRaw !== '' ? parseInt(ventanaRaw) : 5;
+    currentRitmo     = parseFloat(document.getElementById('cfg-ritmo').value) || 300;
+
+    const sampleS = dataSalidas[0]||{};
+    const colAS   = findCol(sampleS, ['agente','comercial','agent']);
+    const colRuta = findCol(sampleS, ['ruta','route','zona','region']);
+    if (!colAS) throw new Error('No se encontró columna de Agente en el archivo de salidas.');
+
+    const salidasMap = {};
+    for (const row of dataSalidas) {
+      const ag = String(row[colAS]||'').trim(); if(!ag) continue;
+      const ru = colRuta ? String(row[colRuta]||'').trim() : '';
+      const fechas = [];
+      for (const k of Object.keys(row)) {
+        if (k===colAS||k===colRuta) continue;
+        const d=parseDate(row[k]); if(d) fechas.push(d);
+      }
+      salidasMap[ag] = {ruta:ru, fechas};
+    }
+
+    const sampleI    = dataInserciones[0]||{};
+    const colAg      = findCol(sampleI,['agente','comercial','agent']);
+    const colFecha   = findCol(sampleI,['fecha','date','dia','día']);
+    const colPrendas = findCol(sampleI,['prenda','cantidad','qty','unidades','units','cant']);
+    const colLider   = findCol(sampleI,['lider','líder','leader']);
+    const colVend    = findCol(sampleI,['vendedor','seller','vend']);
+    const colArt     = findCol(sampleI,['articulo','artículo','codigo','código','sku','article','cod']);
+    const colPed     = findCol(sampleI,['pedido','order','ped']);
+
+    if (!colAg)      throw new Error(`No se encontró columna de Agente en inserciones. Disponibles: ${Object.keys(sampleI).join(', ')}`);
+    if (!colFecha)   throw new Error(`No se encontró columna de Fecha en inserciones.`);
+    if (!colPrendas) throw new Error(`No se encontró columna de Prendas/Cantidad en inserciones.`);
+
+    const ins = [];
+    for (const row of dataInserciones) {
+      const ag=String(row[colAg]||'').trim(), fe=parseDate(row[colFecha]), pr=parseFloat(row[colPrendas])||0;
+      if (!ag||!fe||pr<=0) continue;
+      ins.push({agente:ag, fecha:fe, prendas:pr,
+        lider:   colLider?String(row[colLider]||'').trim():'',
+        vendedor:colVend ?String(row[colVend] ||'').trim():'',
+        articulo:colArt  ?String(row[colArt]  ||'').trim():'',
+        pedido:  colPed  ?String(row[colPed]  ||'').trim():'',
+      });
+    }
+    if (!ins.length) throw new Error('Sin inserciones válidas. Revisá los encabezados del archivo.');
+
+    const agSet = [...new Set(ins.map(i=>i.agente))];
+    allAgentData = [];
+
+    for (const agente of agSet) {
+      const myIns  = ins.filter(i=>i.agente===agente);
+      const info   = salidasMap[agente]||{ruta:'',fechas:[]};
+      const salidas= info.fechas;
+      const critical=[], normal=[];
+
+      for (const i of myIns) {
+        let isCrit=false, nearSal=null, daysTo=null;
+        for (const sal of salidas) {
+          const diff=daysBetween(i.fecha,sal);
+          if (diff>=0 && diff<=currentVentana) {
+            isCrit=true;
+            if (nearSal===null||diff<daysTo){nearSal=sal;daysTo=diff;}
+          }
+        }
+        if(isCrit) critical.push({...i,nearestSalida:nearSal,daysToSalida:daysTo});
+        else normal.push(i);
+      }
+
+      const tot  = myIns.reduce((s,i)=>s+i.prendas,0);
+      const crit = critical.reduce((s,i)=>s+i.prendas,0);
+      allAgentData.push({agente,ruta:info.ruta,totalPrendas:tot,criticalPrendas:crit,
+        criticalPct:tot>0?crit/tot:0, horas:crit/currentRitmo, salidas, critical, normal});
+    }
+
+    allAgentData.sort((a,b)=>b.criticalPct-a.criticalPct);
+    activeAgente=null; activeRuta=null;
+    allRutas     = [...new Set(allAgentData.map(a=>a.ruta).filter(Boolean))].sort();
+    allAgentsList= allAgentData.map(a=>a.agente).sort();
+
+    renderShell();
+    applyFilters();
+
+    document.getElementById('status-bar').textContent =
+      `${fmtNum(ins.length)} inserciones · ${fmtNum(agSet.length)} agentes · ${fmtNum(allRutas.length)} rutas`;
+  } catch(err){showError(err.message);}
+}
+
+// ── SHELL ──
+function renderShell() {
+  document.getElementById('results').innerHTML = `
+    <div class="filter-bar visible" id="filter-bar">
+      <div>
+        <label>Ruta</label>
+        <div class="search-dropdown" id="dd-ruta">
+          <input type="text" id="inp-ruta" placeholder="Buscar ruta…" autocomplete="off">
+          <span class="dd-arrow">▼</span>
+          <div class="dd-list" id="ddl-ruta"></div>
+        </div>
+      </div>
+      <div>
+        <label>Agente Comercial</label>
+        <div class="search-dropdown" id="dd-agente">
+          <input type="text" id="inp-agente" placeholder="Buscar agente…" autocomplete="off">
+          <span class="dd-arrow">▼</span>
+          <div class="dd-list" id="ddl-agente"></div>
+        </div>
+      </div>
+      <button class="btn-clear" id="btn-clear">&#x2715; Limpiar filtros</button>
+    </div>
+
+    <div id="metrics-grid" class="metrics-grid"></div>
+
+    <div class="detail-panel" id="detail-panel">
+      <div class="detail-panel-header">
+        <div><h3 id="detail-title"></h3><div class="agent-meta" id="detail-meta"></div></div>
+        <button class="btn-close-detail" id="btn-close-detail">&#x2715; Cerrar</button>
+      </div>
+      <div class="detail-panel-body" id="detail-body"></div>
+    </div>
+
+    <div class="section-title">Resumen por Agente Comercial</div>
+    <div class="table-wrap">
+      <table id="summary-table">
+        <thead><tr>
+          <th data-col="ruta">Ruta <span class="sa">↕</span></th>
+          <th data-col="agente">Agente Comercial <span class="sa">↕</span></th>
+          <th data-col="totalPrendas" class="num">Total prendas <span class="sa">↕</span></th>
+          <th data-col="criticalPrendas" class="num">Críticas <span class="sa">↕</span></th>
+          <th data-col="criticalPct" class="num sorted">% Crítico <span class="sa">↓</span></th>
+          <th data-col="horas" class="num">Hs armado crítico <span class="sa">↕</span></th>
+          <th class="num">Fechas de salida</th>
+        </tr></thead>
+        <tbody id="summary-tbody"></tbody>
+      </table>
+    </div>`;
+
+  // Ruta dropdown
+  setupDropdown('inp-ruta','ddl-ruta', () => allRutas,
+    v => { activeRuta=v||null; activeAgente=null; clearInp('inp-agente','Buscar agente…'); closeDetail(); applyFilters(); }
+  );
+
+  // Agente dropdown — items depend on activeRuta
+  setupDropdown('inp-agente','ddl-agente',
+    () => activeRuta ? allAgentData.filter(a=>a.ruta===activeRuta).map(a=>a.agente).sort() : allAgentsList,
+    v => { activeAgente=v||null; closeDetail(); applyFilters(); if(activeAgente) openDetail(activeAgente); }
+  );
+
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    activeAgente=null; activeRuta=null;
+    clearInp('inp-ruta','Buscar ruta…'); clearInp('inp-agente','Buscar agente…');
+    closeDetail(); applyFilters();
+  });
+  document.getElementById('btn-close-detail').addEventListener('click', () => {
+    closeDetail(); activeAgente=null; clearInp('inp-agente','Buscar agente…'); applyFilters();
+  });
+
+  document.querySelectorAll('#summary-table th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col=th.dataset.col;
+      if(sortState.col===col) sortState.dir*=-1; else{sortState.col=col;sortState.dir=-1;}
+      document.querySelectorAll('#summary-table th').forEach(t=>{t.classList.remove('sorted');const a=t.querySelector('.sa');if(a)a.textContent='↕';});
+      th.classList.add('sorted');
+      const arr=th.querySelector('.sa'); if(arr) arr.textContent=sortState.dir===1?'↑':'↓';
+      applyFilters();
+    });
+  });
+}
+
+// ── DROPDOWN ENGINE ──
+function setupDropdown(inputId, listId, getItems, onSelect) {
+  const input = document.getElementById(inputId);
+  const list  = document.getElementById(listId);
+  if (!input||!list) return;
+
+  function renderList(q) {
+    const query = q.toLowerCase();
+    const items = getItems().filter(v => v.toLowerCase().includes(query));
+    const isRuta = inputId === 'inp-ruta';
+    const curVal = isRuta ? (activeRuta||'') : (activeAgente||'');
+    const placeholder = isRuta ? '— Todas las rutas —' : '— Todos los agentes —';
+
+    let html = `<div class="dd-item muted" data-val="">${esc(placeholder)}</div>`;
+    if (items.length === 0 && q) {
+      html += '<div class="dd-empty">Sin resultados</div>';
+    } else {
+      html += items.map(v =>
+        `<div class="dd-item${v===curVal?' active':''}" data-val="${esc(v)}">${esc(v)}</div>`
+      ).join('');
+    }
+    list.innerHTML = html;
+
+    list.querySelectorAll('.dd-item').forEach(el => {
+      el.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const val = el.dataset.val;
+        input.value = val;
+        list.classList.remove('open');
+        onSelect(val);
+      });
+    });
+  }
+
+  input.addEventListener('focus', () => { list.classList.add('open'); renderList(''); });
+  input.addEventListener('input', () => renderList(input.value));
+  input.addEventListener('blur',  () => {
+    setTimeout(() => {
+      list.classList.remove('open');
+      const isRuta = inputId === 'inp-ruta';
+      const curVal = isRuta ? (activeRuta||'') : (activeAgente||'');
+      input.value = curVal; // restore to current selection
+    }, 160);
+  });
+}
+
+function clearInp(inputId, placeholder) {
+  const inp = document.getElementById(inputId);
+  if (inp) inp.value = '';
+  const listId = inputId.replace('inp-','ddl-');
+  const list = document.getElementById(listId);
+  if (list) list.classList.remove('open');
+}
+
+// ── APPLY FILTERS ──
+function applyFilters() {
+  let data = [...allAgentData];
+  if (activeRuta)   data = data.filter(a=>a.ruta===activeRuta);
+  if (activeAgente) data = data.filter(a=>a.agente===activeAgente);
+  data.sort((a,b)=>{
+    const av=typeof a[sortState.col]==='string'?a[sortState.col].toLowerCase():(a[sortState.col]??0);
+    const bv=typeof b[sortState.col]==='string'?b[sortState.col].toLowerCase():(b[sortState.col]??0);
+    return av<bv?-sortState.dir:av>bv?sortState.dir:0;
+  });
+  renderMetrics(data);
+  renderTable(data);
+}
+
+// ── METRICS ──
+function renderMetrics(data) {
+  const tot  = data.reduce((s,a)=>s+a.totalPrendas,0);
+  const crit = data.reduce((s,a)=>s+a.criticalPrendas,0);
+  const hrs  = data.reduce((s,a)=>s+a.horas,0);
+  const pct  = tot>0?crit/tot:0;
+  const lbl  = activeAgente?activeAgente:activeRuta?`Ruta: ${activeRuta}`:'Total general';
+  const subVentana = currentVentana===0?'Solo día de salida':`Últimos ${currentVentana} días antes de salida`;
+
+  document.getElementById('metrics-grid').innerHTML = `
+    <div class="metric-card"><div class="label">Total prendas</div><div class="value">${fmtNum(tot)}</div><div class="sub">${lbl}</div></div>
+    <div class="metric-card danger"><div class="label">Prendas en ventana crítica</div><div class="value">${fmtNum(crit)}</div><div class="sub">${subVentana}</div></div>
+    <div class="metric-card highlight"><div class="label">% en zona crítica</div><div class="value">${(pct*100).toFixed(1)}%</div><div class="sub">sobre el total del período</div></div>
+    <div class="metric-card"><div class="label">Tiempo de armado afectado</div><div class="value">${fmtHrs(hrs)}</div><div class="sub">${fmtNum(currentRitmo)} prendas/hora</div></div>`;
+}
+
+// ── TABLE ──
+function renderTable(data) {
+  const tbody = document.getElementById('summary-tbody'); if(!tbody) return;
+  const maxPct = Math.max(...data.map(a=>a.criticalPct),0.001);
+  tbody.innerHTML = data.map(a => {
+    const pct=(a.criticalPct*100).toFixed(1);
+    const bw =Math.round((a.criticalPct/maxPct)*100);
+    const pc =a.criticalPct>=0.5?'h':a.criticalPct>=0.25?'m':'l';
+    const bc =a.criticalPct>=0.5?'d':a.criticalPct>=0.25?'':'s';
+    const sal=a.salidas.length?a.salidas.map(d=>fmtDate(d)).join(' / '):'<span style="color:var(--muted)">Sin fechas</span>';
+    return `<tr class="${a.agente===activeAgente?'sel':''}" onclick="onRow('${esc(a.agente)}')">
+      <td style="color:var(--accent3)">${esc(a.ruta)||'<span style="color:var(--muted)">—</span>'}</td>
+      <td class="nc">${esc(a.agente)}</td>
+      <td class="num">${fmtNum(a.totalPrendas)}</td>
+      <td class="num">${fmtNum(a.criticalPrendas)}</td>
+      <td class="num"><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill ${bc}" style="width:${bw}%"></div></div><span class="pb ${pc}">${pct}%</span></div></td>
+      <td class="num">${fmtHrs(a.horas)}</td>
+      <td class="num" style="font-size:11px;color:var(--accent3)">${sal}</td>
+    </tr>`;
+  }).join('');
+}
+
+function onRow(agente) {
+  if (activeAgente===agente) {
+    activeAgente=null; clearInp('inp-agente','Buscar agente…'); closeDetail(); applyFilters();
+  } else {
+    activeAgente=agente;
+    const inp=document.getElementById('inp-agente'); if(inp) inp.value=agente;
+    applyFilters(); openDetail(agente);
+  }
+}
+
+// ── DETAIL ──
+function openDetail(agente) {
+  const a = allAgentData.find(x=>x.agente===agente); if(!a) return;
+  document.getElementById('detail-title').textContent = a.agente;
+  document.getElementById('detail-meta').textContent =
+    `${a.ruta?'Ruta: '+a.ruta+' · ':''}${fmtNum(a.criticalPrendas)} prendas críticas · ${(a.criticalPct*100).toFixed(1)}% del total · ${fmtHrs(a.horas)} de armado`;
+
+  const chips = a.salidas.map(d=>`<span class="salida-chip">${fmtDate(d)}</span>`).join('');
+
+  const byDate = {};
+  for (const ins of a.critical) {
+    const dk=ins.fecha.toISOString().slice(0,10);
+    if(!byDate[dk]) byDate[dk]={fecha:ins.fecha,prendas:0,rows:[]};
+    byDate[dk].prendas+=ins.prendas; byDate[dk].rows.push(ins);
+  }
+  const rows = Object.keys(byDate).sort().reverse().map(dk=>{
+    const e=byDate[dk], dl=e.rows[0]?.daysToSalida;
+    const ds=dl!=null?`D-${dl}`:'', cc=(dl!=null&&dl<=2)?'cr':'';
+    return `<tr><td class="${cc}">${fmtDate(e.fecha)}</td><td class="${cc}" style="text-align:center">${ds}</td><td style="text-align:right">${fmtNum(e.prendas)}</td><td style="text-align:right">${(e.prendas/currentRitmo).toFixed(1)}h</td><td style="color:var(--accent3);text-align:right">${fmtDate(e.rows[0]?.nearestSalida)}</td></tr>`;
+  }).join('');
+
+  document.getElementById('detail-body').innerHTML = `
+    ${chips?`<div style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">Fechas de salida</div><div class="salida-chips">${chips}</div>`:''}
+    ${a.critical.length>0
+      ?`<div class="table-wrap" style="margin:4px 0 0"><table class="dt"><thead><tr><th>Fecha inserción</th><th style="text-align:center">Días a salida</th><th style="text-align:right">Prendas</th><th style="text-align:right">Horas</th><th style="text-align:right">Próxima salida</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      :`<div style="font-family:var(--mono);font-size:12px;color:var(--safe);padding:8px 0">Sin inserciones en ventana crítica.</div>`}`;
+
+  document.getElementById('detail-panel').classList.add('visible');
+  setTimeout(()=>document.getElementById('detail-panel').scrollIntoView({behavior:'smooth',block:'start'}),50);
+}
+function closeDetail() {
+  const p=document.getElementById('detail-panel');
+  if(p){p.classList.remove('visible');document.getElementById('detail-body').innerHTML='';}
+}
+
+function showError(msg){const b=document.getElementById('error-box');b.textContent='⚠ '+msg;b.style.display='block';}
+function hideError(){document.getElementById('error-box').style.display='none';}
+</script>
+</body>
+</html>
